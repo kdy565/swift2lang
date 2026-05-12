@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+
+# Data — raw BOLD, cached features, large probe models
+data/lebel/
+data/features/
+data/probes/baseline_voxel_ridge.pkl
+
+# Model checkpoints
+*.ckpt
+*.pth
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logging / experiment tracking
+wandb/
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Anaconda installers
+*Anaconda*.sh
+
+# SwiFT — upstream repo, clone separately
+SwiFT/
