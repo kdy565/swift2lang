@@ -2,13 +2,15 @@
 
 **Project status: Closed (May 2026)**
 
-**TL;DR:** Pre-trained SwiFT (contrastively pre-trained on HCP + ABCD + UK Biobank resting-state fMRI) was applied to LeBel et al. 2023 task-fMRI for word-level semantic decoding. A linear ridge probe on SwiFT features gave chance-level accuracy (Pearson r ≈ 0.0006). RSA between SwiFT feature RDMs and GPT-2 contextual RDMs showed a small but significant correlation (r = 0.035), but a time-shift control (+50 TRs) produced an *even higher* correlation (r = 0.056), proving the signal is temporal autocorrelation, not semantics. The project is closed here — pre-trained SwiFT does not carry stimulus-locked semantic information useful for decoding.
+**TL;DR:** Pre-trained SwiFT (Swin 4D fMRI Transformer, pre-trained on resting-state fMRI — see Note 1 for checkpoint provenance) was applied to LeBel et al. 2023 task-fMRI for word-level semantic decoding. A linear ridge probe on SwiFT features gave chance-level accuracy (Pearson r ≈ 0.0006). RSA between SwiFT feature RDMs and GPT-2 contextual RDMs showed a small but significant correlation (r = 0.035), but a time-shift control (+50 TRs) produced an *even higher* correlation (r = 0.056), proving the signal is temporal autocorrelation, not semantics. The project is closed here — pre-trained SwiFT does not carry stimulus-locked semantic information useful for word-level decoding.
+
+> **Note 1 — checkpoint provenance [VERIFY before circulating]:** The exact pre-training dataset (HCP, ABCD, UK Biobank, or a combination) and objective (supervised vs contrastive) used for the SwiFT checkpoint employed in this work should be confirmed by inspecting the `SwiFT/` submodule README and the checkpoint file metadata. Kim et al. (NeurIPS 2023) trained variants on each of HCP, ABCD, and UKB separately, with both supervised and self-supervised objectives.
 
 ---
 
 ## Summary
 
-We tested whether a **pre-trained SwiFT** (Swin 4D Transformer, contrastively pre-trained on resting-state fMRI from HCP, ABCD, and UK Biobank — henceforth "all three datasets") carries stimulus-locked semantic information when applied to **LeBel et al. 2023** task-fMRI (subjects listening to naturalistic stories). Two independent sanity checks were run. Both returned negative results — SwiFT features do **not** capture word-level semantic structure beyond raw voxel baselines.
+We tested whether a **pre-trained SwiFT** (Swin 4D Transformer pre-trained on resting-state fMRI) carries stimulus-locked semantic information when applied to **LeBel et al. 2023** task-fMRI (subjects listening to naturalistic stories). Two independent sanity checks were run. Both returned negative results — SwiFT features do **not** capture word-level semantic structure beyond raw voxel baselines.
 
 **The project is being closed here.** A planned third stage (fine-tuning SwiFT on task-fMRI) was not pursued, as the pre-trained representations show no evidence of carrying the type of stimulus information that fine-tuning would amplify.
 
@@ -67,7 +69,7 @@ Chance-level decoding. Neither model beats trivial baselines. The voxel baseline
 
 ---
 
-<a name="note-target-diff"></a>**Note on target embedding difference across experiments:** The linear probe used *isolated* word embeddings (each word embedded alone via GPT-2's first token hidden state), because the probe learns a per-word fixed target suitable for classification. The RSA used *contextual* embeddings (running story prefix, last-token hidden state), because RSA measures representational geometry and context is essential for capturing stimulus-driven brain responses. This difference means the two experiments test related but distinct hypotheses: linear separability of word identity vs. geometric alignment of stimulus representations. Both returned negative.
+<a name="note-target-diff"></a>**Note on target embedding difference across experiments:** The linear probe used *isolated* word embeddings (each word embedded alone via GPT-2's first-token hidden state), because the probe learns a per-word fixed target suitable for retrieval-style decoding. The RSA used *contextual* embeddings (running story prefix, last-token hidden state), because RSA measures representational geometry and context is essential for capturing stimulus-driven brain responses. This difference means the two experiments test related but distinct hypotheses: linear separability of word identity vs. geometric alignment of stimulus representations. Both returned negative.
 
 ---
 
@@ -85,7 +87,7 @@ Both experiments converge on the same conclusion: **Pre-trained SwiFT features a
 
 1. **Single subject (UTS01), two stories (againstthewind, sweetaspie).** Results may not generalize to other subjects or a wider range of narrative stimuli.
 2. **Frozen SwiFT only.** We tested only the pre-trained checkpoint without any fine-tuning on task-fMRI. Fine-tuning could in principle adapt SwiFT to task data, but the absence of any signal in the frozen representations makes this a low-priority direction.
-3. **GPT-2 small as the language model.** Larger LMs (LLaMA-3, GPT-2-XL) or models fine-tuned on narrative comprehension might yield different RSA results, though the time-shift confound would need to be re-checked.
+3. **GPT-2 small as the language model.** Larger LMs (LLaMA-3, GPT-2-XL) or models fine-tuned on narrative comprehension might yield different RSA results, though the time-shift confound would still need to be re-checked.
 4. **Fixed HRF delay (5 TRs).** A single fixed delay was used; the optimal haemodynamic lag may vary across brain regions and subjects.
 5. **RSA on a single story (N=150 TRs).** Longer recordings or pooling across multiple stories could increase statistical power, though the time-shift control result suggests the limiting factor is not power but confound control.
 
@@ -93,26 +95,30 @@ Both experiments converge on the same conclusion: **Pre-trained SwiFT features a
 
 ## Bugs found and resolved
 
-1. **GPT-2 `truncation_side` bug (RSA only).** In `rsa_swift_lebel/extract_lang.py`, the HuggingFace tokenizer defaulted to `truncation_side="right"`, causing all TRs to receive the same embedding (truncated to the first 200 tokens regardless of position). Fixed by setting `tokenizer.truncation_side = "left"`. The linear probe pipeline was unaffected because it uses `build_gpt2_embeddings` which tokenizes single words — truncation never fires.
-2. **Random-init SwiFT pooling bug.** In `rsa_swift_lebel/extract_features.py`, the `extract_raw` helper pooled feature maps over (H, W, T) but omitted the depth (D) dimension, producing a 3D array (N, C, D) instead of 2D (N, C). Fixed by pooling over all four spatial–temporal dimensions.
+1. **GPT-2 `truncation_side` bug (RSA only).** In `rsa_swift_lebel/extract_lang.py`, the HuggingFace tokenizer defaulted to `truncation_side="right"`, causing all TRs to receive the same embedding (truncated to the first 200 tokens regardless of position). Fixed by setting `tokenizer.truncation_side = "left"`. The linear probe pipeline was unaffected because it uses `build_gpt2_embeddings`, which tokenizes single words — truncation never fires.
+2. **Random-init SwiFT pooling bug.** In `rsa_swift_lebel/extract_features.py`, the `extract_raw` helper pooled feature maps over `(H, W, T)` but omitted the depth `(D)` dimension, producing a 3-D array of shape `(N, C, D) = (150, 288, 2)` instead of the intended 2-D `(N, C) = (150, 288)`. Fixed by pooling over all four spatial–temporal dimensions `(D, H, W, T)`.
 3. **Missing matplotlib.** Not installed in the `py39` conda environment; added via `pip install matplotlib`.
 
 ---
 
 ## Next direction
 
-The recommended follow-up is to bypass SwiFT entirely and use the **Tang & Huth (2024) ridge stimulation / voxelwise encoding pipeline** (https://github.com/HuthLab/speechmodelfit). This approach fits separate ridge regression models per voxel to predict BOLD from GPT-2 embeddings, which:
-- Avoids the compression artifacts of a single whole-brain embedding model like SwiFT.
-- Naturally accounts for heterogeneous HRF delays across brain regions.
-- Has proven effective for word-level encoding across multiple subjects and stories.
+The recommended follow-up is to bypass SwiFT entirely and use the **voxelwise encoding model pipeline** developed by the Huth lab (Huth et al. 2016; Tang et al. 2023): fit separate ridge regression models per voxel to predict BOLD from contextual LLM embeddings. Reference code and the full LeBel dataset download/preprocessing scripts are available at the official repository:
 
-If a deep learning approach is preferred, fine-tuning SwiFT on the encoding objective (predicting BOLD from language features) may be more promising than the decoding approach attempted here.
+→ https://github.com/HuthLab/deep-fMRI-dataset
+
+This approach:
+- Avoids the compression artefacts of a single whole-brain embedding model like SwiFT.
+- Naturally accounts for heterogeneous HRF delays across brain regions through per-voxel fitting.
+- Has been validated for word-level encoding across multiple subjects and stories in the published literature.
+
+Building on this baseline, possible contribution directions include testing newer/larger LLMs (LLaMA-3, Qwen) as feature spaces, incorporating anatomical region priors, or analysing cross-subject generalisation.
 
 ---
 
 ## Methodological contribution
 
-The RSA time-shift control (condition 4 in `compute_rsa.py`) is a cheap diagnostic that should be standard in fMRI RSA studies using continuous naturalistic stimuli. It revealed that the significant-but-small RSA correlation was entirely driven by temporal smoothness rather than semantic alignment. This is a known confound (Kriegeskorte 2008; Kriegeskorte & Kievit 2013) but is rarely tested directly.
+The RSA time-shift control (condition 4 in `compute_rsa.py`) is a cheap diagnostic that should be standard in fMRI RSA studies using continuous naturalistic stimuli. It revealed that the significant-but-small RSA correlation was entirely driven by temporal smoothness rather than semantic alignment. This is a known confound (Kriegeskorte 2008; Kriegeskorte & Kievit 2013) but is rarely tested directly in published RSA analyses.
 
 ---
 
@@ -174,10 +180,11 @@ python rsa_swift_lebel/plot_results.py
 
 ## References
 
-- LeBel, A., Jain, S., & Huth, A. G. (2023). Voxelwise encoding models show that cerebellar language representations are highly conceptual. *Journal of Neuroscience*, 43(33), 5932–5948. [OpenNeuro ds003020]
-- Kim, Y., Kwon, J., et al. (2023). SwiFT: Swin 4D fMRI Transformer. *arXiv:2307.05916*.
+- LeBel, A., Wagner, L., Jain, S., Adhikari-Desai, A., Gupta, B., Morgenthal, A., Tang, J., Xu, L., & Huth, A. G. (2023). A natural language fMRI dataset for voxelwise encoding models. *Scientific Data*, 10, 555. https://doi.org/10.1038/s41597-023-02437-z [OpenNeuro: ds003020]
+- Kim, P. Y., et al. (2023). SwiFT: Swin 4D fMRI Transformer. *Advances in Neural Information Processing Systems (NeurIPS)*, 36. [VERIFY full author list and exact title from arxiv.org/abs/2307.05916]
+- Tang, J., LeBel, A., Jain, S., & Huth, A. G. (2023). Semantic reconstruction of continuous language from non-invasive brain recordings. *Nature Neuroscience*, 26, 858–866.
+- Huth, A. G., de Heer, W. A., Griffiths, T. L., Theunissen, F. E., & Gallant, J. L. (2016). Natural speech reveals the semantic maps that tile human cerebral cortex. *Nature*, 532, 453–458.
 - Caucheteux, C., & King, J.-R. (2022). Brains and algorithms partially converge in natural language processing. *Communications Biology*, 5, 134.
 - Goldstein, A., et al. (2022). Shared computational principles for language processing in humans and deep language models. *Nature Neuroscience*, 25, 369–380.
 - Kriegeskorte, N. (2008). Representational similarity analysis — connecting the branches of systems neuroscience. *Frontiers in Systems Neuroscience*, 2, 4.
 - Kriegeskorte, N., & Kievit, R. A. (2013). Representational geometry: integrating cognition, computation, and the brain. *Trends in Cognitive Sciences*, 17(8), 401–412.
-- Tang, J., & Huth, A. G. (2024). speechmodelfit: Voxelwise encoding models for speech processing. https://github.com/HuthLab/speechmodelfit
